@@ -25,32 +25,41 @@ def parse_wsdl(state: GraphState) -> GraphState:
         transport.load = lambda url: wsdl_content_bytes
         client = Client('dummy.wsdl', transport=transport)
 
-        # Helper to clean names like {http://namespace}MyName -> MyName
-        def clean_name(name):
-            return name.split('}')[-1] if '}' in name else name
+        def get_qname_parts(qname):
+            """Extracts namespace and localname from a QName string like '{ns}name'."""
+            if '}' in qname and qname.startswith('{'):
+                ns, name = qname.split('}', 1)
+                return ns[1:], name
+            return None, qname
 
-        target_namespace = client.wsdl.definitions.target_namespace
-        parsed_data = {"services": [], "target_namespace": target_namespace}
+        target_namespace = None
+        parsed_data = {"services": []}
 
         for service in client.wsdl.services.values():
-            service_info = {"name": clean_name(service.name), "ports": []}
+            service_ns, service_name = get_qname_parts(service.name)
+            service_info = {"name": service_name, "ports": []}
+
             for port in service.ports.values():
-                binding_name = clean_name(port.binding.name)
-                port_info = {"name": clean_name(port.name), "binding": binding_name, "operations": []}
+                port_ns, port_name = get_qname_parts(port.name)
+
+                # Extract namespace from the binding qname
+                binding_qname = port.binding.name
+                binding_ns, binding_name = get_qname_parts(binding_qname)
+                if binding_ns and not target_namespace:
+                    target_namespace = binding_ns
+
+                port_info = {"name": port_name, "binding": binding_name, "operations": []}
                 for op_name, operation in port.binding._operations.items():
-                    # Extract input elements from the schema
                     input_elements = []
                     if operation.input.body.parts:
                         part = list(operation.input.body.parts.values())[0]
-                        # The part's element is where the actual schema type is defined
                         element = part.element
-                        # Now inspect the schema for this element to get its children
                         if element and hasattr(element.type, 'elements'):
                             for elem_name, elem_type in element.type.elements:
                                 input_elements.append({"name": elem_name, "type": elem_type.name})
 
                     operation_info = {
-                        "name": clean_name(op_name),
+                        "name": op_name,
                         "soap_action": operation.soapaction,
                         "input_elements": input_elements,
                     }
@@ -58,11 +67,12 @@ def parse_wsdl(state: GraphState) -> GraphState:
                 service_info["ports"].append(port_info)
             parsed_data["services"].append(service_info)
 
+        # Add the extracted namespace to the final parsed data
+        parsed_data["target_namespace"] = target_namespace or ""
+
         return {**state, "parsed_wsdl": parsed_data}
     except Exception as e:
         print(f"Error parsing WSDL: {e}")
-        # It's better to raise an exception or handle it more gracefully
-        # For now, we'll keep the existing error handling pattern
         return {**state, "parsed_wsdl": {"error": str(e)}}
 
 import requests
