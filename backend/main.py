@@ -1,9 +1,23 @@
 from fastapi import FastAPI, UploadFile, File, Form
 from fastapi.responses import StreamingResponse
+from fastapi.middleware.cors import CORSMiddleware
 import io
 from workflow import create_workflow
 
 app = FastAPI()
+
+origins = [
+    "http://localhost:3000",
+]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 workflow = create_workflow()
 
 @app.post("/generate-soapui-project/")
