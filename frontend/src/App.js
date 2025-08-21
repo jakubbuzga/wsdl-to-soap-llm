@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import axios from 'axios';
 import './index.css';
 
@@ -7,6 +7,11 @@ function App() {
     const [wsdlFile, setWsdlFile] = useState(null);
     const [generatedXml, setGeneratedXml] = useState('<!-- Generated XML will appear here -->');
     const [isLoading, setIsLoading] = useState(false);
+    const fileInputRef = useRef(null);
+
+    const handleAreaClick = () => {
+        fileInputRef.current.click();
+    };
 
     const handleFileChange = (e) => {
         setWsdlFile(e.target.files[0]);
@@ -79,12 +84,12 @@ function App() {
                             </div>
                             <div className="form-group mb-6">
                                 <label htmlFor="wsdl-file" className="block font-medium text-sm mb-2">WSDL File</label>
-                                <div className="file-drop-area relative flex flex-col justify-center items-center p-8 border-2 border-dashed border-gray-300 rounded-lg text-center cursor-pointer hover:border-blue-500 hover:bg-gray-50">
+                                <div className="file-drop-area relative flex flex-col justify-center items-center p-8 border-2 border-dashed border-gray-300 rounded-lg text-center cursor-pointer hover:border-blue-500 hover:bg-gray-50" onClick={handleAreaClick}>
                                     <div className="stitch-badge absolute -top-3 left-4 bg-gray-700 text-white px-3 py-1 rounded-full text-xs font-medium">Stitch - Design with AI</div>
                                     <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#6B7280" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
                                     <p className="upload-text text-gray-500 mt-4"><strong className="text-blue-600 font-medium">Upload a file</strong> or drag and drop</p>
                                     <p className="upload-hint text-gray-400 text-sm mt-1">WSDL up to 10MB</p>
-                                    <input type="file" id="wsdl-file-input" className="hidden" onChange={handleFileChange} />
+                                    <input type="file" id="wsdl-file-input" className="hidden" onChange={handleFileChange} ref={fileInputRef} />
                                 </div>
                             </div>
                             <button type="submit" className="btn-primary w-full inline-flex items-center justify-center gap-2 px-6 py-3.5 text-base font-semibold text-white bg-blue-600 rounded-lg hover:bg-blue-700" disabled={isLoading}>
