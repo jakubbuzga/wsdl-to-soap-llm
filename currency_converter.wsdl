@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="http://schemas.xmlsoap.org/wsdl/"
+             xmlns:soap="http://schemas.xmlsoap.org/wsdl/soap/"
+             xmlns:tns="http://www.example.com/currencyconverter"
+             xmlns:xsd="http://www.w3.org/2001/XMLSchema"
+             name="CurrencyConverterService"
+             targetNamespace="http://www.example.com/currencyconverter">
+
+    <!-- 1. Define the data types (schema) -->
+    <types>
+        <xsd:schema targetNamespace="http://www.example.com/currencyconverter" elementFormDefault="qualified">
+            <xsd:element name="convertRequest">
+                <xsd:complexType>
+                    <xsd:sequence>
+                        <xsd:element name="source_currency" type="xsd:string"/>
+                        <xsd:element name="target_currency" type="xsd:string"/>
+                        <xsd:element name="amount" type="xsd:double"/>
+                    </xsd:sequence>
+                </xsd:complexType>
+            </xsd:element>
+            <xsd:element name="convertResponse">
+                <xsd:complexType>
+                    <xsd:sequence>
+                        <xsd:element name="converted_amount" type="xsd:double"/>
+                    </sequence>
+                </xsd:complexType>
+            </xsd:element>
+        </xsd:schema>
+    </types>
+
+    <!-- 2. Define the messages for the operation -->
+    <message name="ConvertInputMessage">
+        <part name="parameters" element="tns:convertRequest"/>
+    </message>
+    <message name="ConvertOutputMessage">
+        <part name="parameters" element="tns:convertResponse"/>
+    </message>
+
+    <!-- 3. Define the PortType (the operation) -->
+    <portType name="CurrencyConverterPortType">
+        <operation name="convert">
+            <input message="tns:ConvertInputMessage"/>
+            <output message="tns:ConvertOutputMessage"/>
+        </operation>
+    </portType>
+
+    <!-- 4. Define the Binding (SOAP over HTTP) -->
+    <binding name="CurrencyConverterBinding" type="tns:CurrencyConverterPortType">
+        <soap:binding style="document" transport="http://schemas.xmlsoap.org/soap/http"/>
+        <operation name="convert">
+            <soap:operation soapAction="convert" style="document"/>
+            <input>
+                <soap:body use="literal"/>
+            </input>
+            <output>
+                <soap:body use="literal"/>
+            </output>
+        </operation>
+    </binding>
+
+    <!-- 5. Define the Service (the endpoint) -->
+    <service name="CurrencyConverterService">
+        <port name="CurrencyConverterPort" binding="tns:CurrencyConverterBinding">
+            <soap:address location="http://localhost:8000/ws"/>
+        </port>
+    </service>
+
+</definitions>

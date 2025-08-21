@@ -29,7 +29,7 @@ def parse_wsdl(state: GraphState) -> GraphState:
         def clean_name(name):
             return name.split('}')[-1] if '}' in name else name
 
-        target_namespace = client.wsdl.target_namespace
+        target_namespace = client.wsdl.definitions.target_namespace
         parsed_data = {"services": [], "target_namespace": target_namespace}
 
         for service in client.wsdl.services.values():
