@@ -1,5 +1,5 @@
 from typing import TypedDict, List
-from langgraph.graph import StatefulGraph, END
+from langgraph.graph import StateGraph, END
 
 # 1. Define the state for the graph
 class GraphState(TypedDict):
@@ -140,7 +140,7 @@ def generate_soapui_xml(state: GraphState) -> GraphState:
 
 # 3. Define the graph
 def create_workflow():
-    workflow = StatefulGraph(GraphState)
+    workflow = StateGraph(GraphState)
 
     # Add the nodes
     workflow.add_node("parse_wsdl", parse_wsdl)
