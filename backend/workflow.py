@@ -20,11 +20,11 @@ def parse_wsdl(state: GraphState) -> GraphState:
     """
     print("---PARSING WSDL---")
     try:
-        wsdl_content = state["wsdl_content"].encode("utf-8")
+        wsdl_content_bytes = state["wsdl_content"].encode("utf-8")
         # Use a custom transport to load the WSDL from memory
         transport = Transport(cache=None)
-        transport.load = lambda url: BytesIO(wsdl_content)
-        client = Client(wsdl_content, transport=transport)
+        transport.load = lambda url: wsdl_content_bytes
+        client = Client('dummy.wsdl', transport=transport)
 
         parsed_data = {"services": []}
         for service in client.wsdl.services.values():
@@ -121,19 +121,23 @@ def generate_soapui_xml(state: GraphState) -> GraphState:
     print("---GENERATING SOAPUI XML---")
     test_cases = state.get("test_cases", [])
 
-    project = etree.Element("con:soapui-project", name="Generated Project", xmlns_con="http://eviware.com/soapui/config")
+    # Define the SoapUI namespace
+    NSMAP = {'con': 'http://eviware.com/soapui/config'}
+    CON = f"{{{NSMAP['con']}}}"
+
+    project = etree.Element(CON + "soapui-project", name="Generated Project", nsmap=NSMAP)
 
     for i, test_case in enumerate(test_cases):
-        test_suite = etree.SubElement(project, "con:testSuite", name=f"TestSuite {i+1}")
-        test_case_elem = etree.SubElement(test_suite, "con:testCase", name=test_case.get("name", f"TestCase {i+1}"))
+        test_suite = etree.SubElement(project, CON + "testSuite", name=f"TestSuite {i+1}")
+        test_case_elem = etree.SubElement(test_suite, CON + "testCase", name=test_case.get("name", f"TestCase {i+1}"))
 
-        test_step = etree.SubElement(test_case_elem, "con:testStep", type="request", name=f"Request {i+1}")
-        config = etree.SubElement(test_step, "con:config")
-        etree.SubElement(config, "con:request", name=f"Request {i+1}").text = etree.CDATA(test_case.get("request", ""))
+        test_step = etree.SubElement(test_case_elem, CON + "testStep", type="request", name=f"Request {i+1}")
+        config = etree.SubElement(test_step, CON + "config")
+        etree.SubElement(config, CON + "request", name=f"Request {i+1}").text = etree.CDATA(test_case.get("request", ""))
 
-        assertions = etree.SubElement(test_step, "con:assertions")
+        assertions = etree.SubElement(test_step, CON + "assertions")
         for assertion in test_case.get("assertions", []):
-            etree.SubElement(assertions, "con:assertion", type="Valid HTTP Status Codes").text = "200"
+            etree.SubElement(assertions, CON + "assertion", type="Valid HTTP Status Codes").text = "200"
 
     xml_content = etree.tostring(project, pretty_print=True, xml_declaration=True, encoding="UTF-8")
     return {**state, "soapui_project_xml": xml_content.decode("utf-8")}
