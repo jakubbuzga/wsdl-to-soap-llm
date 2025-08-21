@@ -1,7 +1,7 @@
 from fastapi import FastAPI, UploadFile, File, Form
 from fastapi.responses import StreamingResponse
 import io
-from .workflow import create_workflow
+from workflow import create_workflow
 
 app = FastAPI()
 workflow = create_workflow()
