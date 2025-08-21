@@ -25,30 +25,25 @@ def parse_wsdl(state: GraphState) -> GraphState:
         transport.load = lambda url: wsdl_content_bytes
         client = Client('dummy.wsdl', transport=transport)
 
-        def get_qname_parts(qname):
-            """Extracts namespace and localname from a QName string like '{ns}name'."""
-            if '}' in qname and qname.startswith('{'):
-                ns, name = qname.split('}', 1)
-                return ns[1:], name
-            return None, qname
-
         target_namespace = None
         parsed_data = {"services": []}
 
         for service in client.wsdl.services.values():
-            service_ns, service_name = get_qname_parts(service.name)
-            service_info = {"name": service_name, "ports": []}
+            service_info = {"name": service.name.localname, "ports": []}
 
             for port in service.ports.values():
-                port_ns, port_name = get_qname_parts(port.name)
+                binding_name_qname = port.binding.name
 
-                # Extract namespace from the binding qname
-                binding_qname = port.binding.name
-                binding_ns, binding_name = get_qname_parts(binding_qname)
-                if binding_ns and not target_namespace:
-                    target_namespace = binding_ns
+                # Extract namespace from the binding QName object
+                if binding_name_qname.namespace and not target_namespace:
+                    target_namespace = binding_name_qname.namespace
 
-                port_info = {"name": port_name, "binding": binding_name, "operations": []}
+                port_info = {
+                    "name": port.name.localname,
+                    "binding": binding_name_qname.localname,
+                    "operations": []
+                }
+
                 for op_name, operation in port.binding._operations.items():
                     input_elements = []
                     if operation.input.body.parts:
@@ -67,7 +62,6 @@ def parse_wsdl(state: GraphState) -> GraphState:
                 service_info["ports"].append(port_info)
             parsed_data["services"].append(service_info)
 
-        # Add the extracted namespace to the final parsed data
         parsed_data["target_namespace"] = target_namespace or ""
 
         return {**state, "parsed_wsdl": parsed_data}
