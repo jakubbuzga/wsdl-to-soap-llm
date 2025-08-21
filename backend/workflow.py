@@ -32,16 +32,20 @@ def parse_wsdl(state: GraphState) -> GraphState:
             for port in service.ports.values():
                 port_info = {"name": port.name, "binding": port.binding.name, "operations": []}
                 for operation in port.binding._operations.values():
+                    input_elements = []
+                    if hasattr(operation.input, 'body') and hasattr(operation.input.body, 'parts'):
+                        for part in operation.input.body.parts.values():
+                            input_elements.append({"name": part.name, "type": str(part.type)})
+
+                    output_elements = []
+                    if hasattr(operation.output, 'body') and hasattr(operation.output.body, 'parts'):
+                        for part in operation.output.body.parts.values():
+                            output_elements.append({"name": part.name, "type": str(part.type)})
+
                     operation_info = {
                         "name": operation.name,
-                        "input_elements": [
-                            {"name": part.name, "type": str(part.type)}
-                            for part in operation.input.body.parts.values()
-                        ],
-                        "output_elements": [
-                            {"name": part.name, "type": str(part.type)}
-                            for part in operation.output.body.parts.values()
-                        ],
+                        "input_elements": input_elements,
+                        "output_elements": output_elements,
                     }
                     port_info["operations"].append(operation_info)
                 service_info["ports"].append(port_info)
@@ -128,6 +132,9 @@ def generate_soapui_xml(state: GraphState) -> GraphState:
     project = etree.Element(CON + "soapui-project", name="Generated Project", nsmap=NSMAP)
 
     for i, test_case in enumerate(test_cases):
+        if not isinstance(test_case, dict):
+            test_case = {"name": "Invalid Test Case format", "request": str(test_case), "assertions": []}
+
         test_suite = etree.SubElement(project, CON + "testSuite", name=f"TestSuite {i+1}")
         test_case_elem = etree.SubElement(test_suite, CON + "testCase", name=test_case.get("name", f"TestCase {i+1}"))
 
