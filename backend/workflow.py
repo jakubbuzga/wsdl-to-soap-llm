@@ -21,31 +21,38 @@ def parse_wsdl(state: GraphState) -> GraphState:
     print("---PARSING WSDL---")
     try:
         wsdl_content_bytes = state["wsdl_content"].encode("utf-8")
-        # Use a custom transport to load the WSDL from memory
         transport = Transport(cache=None)
         transport.load = lambda url: wsdl_content_bytes
         client = Client('dummy.wsdl', transport=transport)
 
-        parsed_data = {"services": []}
-        for service in client.wsdl.services.values():
-            service_info = {"name": str(service.name), "ports": []}
-            for port in service.ports.values():
-                port_info = {"name": str(port.name), "binding": str(port.binding.name), "operations": []}
-                for operation in port.binding._operations.values():
-                    input_elements = []
-                    if hasattr(operation.input, 'body') and hasattr(operation.input.body, 'parts'):
-                        for part in operation.input.body.parts.values():
-                            input_elements.append({"name": str(part.name), "type": str(part.type)})
+        # Helper to clean names like {http://namespace}MyName -> MyName
+        def clean_name(name):
+            return name.split('}')[-1] if '}' in name else name
 
-                    output_elements = []
-                    if hasattr(operation.output, 'body') and hasattr(operation.output.body, 'parts'):
-                        for part in operation.output.body.parts.values():
-                            output_elements.append({"name": str(part.name), "type": str(part.type)})
+        target_namespace = client.wsdl.target_namespace
+        parsed_data = {"services": [], "target_namespace": target_namespace}
+
+        for service in client.wsdl.services.values():
+            service_info = {"name": clean_name(service.name), "ports": []}
+            for port in service.ports.values():
+                binding_name = clean_name(port.binding.name)
+                port_info = {"name": clean_name(port.name), "binding": binding_name, "operations": []}
+                for op_name, operation in port.binding._operations.items():
+                    # Extract input elements from the schema
+                    input_elements = []
+                    if operation.input.body.parts:
+                        part = list(operation.input.body.parts.values())[0]
+                        # The part's element is where the actual schema type is defined
+                        element = part.element
+                        # Now inspect the schema for this element to get its children
+                        if element and hasattr(element.type, 'elements'):
+                            for elem_name, elem_type in element.type.elements:
+                                input_elements.append({"name": elem_name, "type": elem_type.name})
 
                     operation_info = {
-                        "name": str(operation.name),
+                        "name": clean_name(op_name),
+                        "soap_action": operation.soapaction,
                         "input_elements": input_elements,
-                        "output_elements": output_elements,
                     }
                     port_info["operations"].append(operation_info)
                 service_info["ports"].append(port_info)
@@ -54,6 +61,8 @@ def parse_wsdl(state: GraphState) -> GraphState:
         return {**state, "parsed_wsdl": parsed_data}
     except Exception as e:
         print(f"Error parsing WSDL: {e}")
+        # It's better to raise an exception or handle it more gracefully
+        # For now, we'll keep the existing error handling pattern
         return {**state, "parsed_wsdl": {"error": str(e)}}
 
 import requests
@@ -62,128 +71,176 @@ import os
 
 def generate_test_cases(state: GraphState) -> GraphState:
     """
-    Generates example SOAP request bodies for each WSDL operation using an LLM.
+    Generates test cases with requests and assertions for each WSDL operation using an LLM.
     """
     print("---GENERATING TEST CASES---")
     parsed_wsdl = state.get("parsed_wsdl", {})
     user_input = state.get("user_input", "")
+    target_namespace = parsed_wsdl.get("target_namespace", "")
     ollama_base_url = os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434")
 
-    generated_requests = {}
+    all_test_cases = {}
 
     for service in parsed_wsdl.get("services", []):
         for port in service.get("ports", []):
             for op in port.get("operations", []):
                 op_name = op.get("name")
+                soap_action = op.get("soap_action")
+
                 prompt = f"""
-                Given the following WSDL operation details, generate a JSON object containing three example SOAP request envelopes.
-                The keys should be "positive_case", "negative_case", and "edge_case".
-                The values should be the complete XML for a valid SOAP request envelope for that case.
+                You are a SoapUI test case generation expert.
+                Given the WSDL operation details, generate a JSON object containing three test cases: a positive case, a negative case, and an edge case.
 
-                Operation: {op_name}
-                Inputs: {json.dumps(op.get("input_elements", []), indent=2)}
-                User Requirements: "{user_input}"
+                **Operation Details:**
+                - Name: {op_name}
+                - Target Namespace: {target_namespace}
+                - SOAP Action: {soap_action}
+                - Input Elements: {json.dumps(op.get("input_elements", []), indent=2)}
+                - User Requirements: "{user_input}"
 
-                Generate the full <soapenv:Envelope>...</soapenv:Envelope> for each case.
-                Ensure the XML is well-formed.
+                **Instructions:**
+                1.  **Request Body:** Create a complete, well-formed SOAP 1.1 envelope for each test case.
+                    - The request payload (inside soapenv:Body) must have its elements qualified with the target namespace: `xmlns="{target_namespace}"`.
+                    - Use realistic and meaningful data.
+                2.  **Test Case Name:** Provide a descriptive name for each test case.
+                3.  **Assertions:** For each test case, provide a list of appropriate SoapUI assertions.
+                    - For positive cases, include `Valid HTTP Status Codes` (200) and an `XPath Match` to verify a key element in the response.
+                    - For negative cases, expect a SOAP Fault. Assertions should be `SOAP Fault` and `Valid HTTP Status Codes` (500).
+                    - For edge cases, assertions will depend on the case, but should at least include `Valid HTTP Status Codes` (200).
 
-                Example JSON Output format:
+                **JSON Output Format:**
                 {{
-                    "positive_case": "<soapenv:Envelope ...>...</soapenv:Envelope>",
-                    "negative_case": "<soapenv:Envelope ...>...</soapenv:Envelope>",
-                    "edge_case": "<soapenv:Envelope ...>...</soapenv:Envelope>"
+                  "positive_case": {{
+                    "name": "Descriptive name for the positive test",
+                    "request": "<soapenv:Envelope ...>...</soapenv:Envelope>",
+                    "assertions": [
+                      {{"type": "Valid HTTP Status Codes", "value": "200"}},
+                      {{"type": "XPath Match", "value": "/*:Envelope/*:Body/*:YourResponseElement/*:SomeField"}}
+                    ]
+                  }},
+                  "negative_case": {{
+                    "name": "Descriptive name for the negative test",
+                    "request": "<soapenv:Envelope ...>...</soapenv:Envelope>",
+                    "assertions": [
+                      {{"type": "SOAP Fault", "value": ""}},
+                      {{"type": "Valid HTTP Status Codes", "value": "500"}}
+                    ]
+                  }},
+                  "edge_case": {{
+                    "name": "Descriptive name for the edge case",
+                    "request": "<soapenv:Envelope ...>...</soapenv:Envelope>",
+                    "assertions": [
+                      {{"type": "Valid HTTP Status Codes", "value": "200"}}
+                    ]
+                  }}
                 }}
                 """
 
                 try:
+                    print(f"Generating test cases for operation: {op_name}")
                     response = requests.post(
                         f"{ollama_base_url}/api/generate",
-                        json={
-                            "model": "mistral",
-                            "prompt": prompt,
-                            "format": "json",
-                            "stream": False
-                        },
-                        timeout=120
+                        json={"model": "mistral", "prompt": prompt, "format": "json", "stream": False},
+                        timeout=180
                     )
                     response.raise_for_status()
-                    requests_str = response.json().get("response", "{}")
-                    # The LLM response is a JSON string that needs to be parsed
-                    generated_requests[op_name] = json.loads(requests_str)
+                    response_json_str = response.json().get("response", "{}")
+
+                    # The LLM often returns a markdown block ```json ... ```, so we need to strip it
+                    if response_json_str.startswith("```json"):
+                        response_json_str = response_json_str[7:-4].strip()
+
+                    test_case_data = json.loads(response_json_str)
+                    all_test_cases[op_name] = test_case_data
                 except (requests.exceptions.RequestException, json.JSONDecodeError) as e:
                     print(f"Error generating test cases for operation {op_name}: {e}")
-                    generated_requests[op_name] = {
-                        "error_case": f"<error>Could not generate test case: {e}</error>"
+                    # Provide a fallback error structure
+                    all_test_cases[op_name] = {
+                        "error_case": {
+                            "name": f"Error Generating Case for {op_name}",
+                            "request": f"<error>Could not generate test case: {e}</error>",
+                            "assertions": []
+                        }
                     }
 
-    # The state now holds a dictionary of generated requests per operation
-    return {**state, "test_cases": generated_requests}
+    return {**state, "test_cases": all_test_cases}
 
 from lxml import etree
 
 def generate_soapui_xml(state: GraphState) -> GraphState:
     """
-    Constructs a valid, self-contained SoapUI XML project file.
+    Constructs a valid, self-contained SoapUI XML project file from the generated test cases.
     """
     print("---GENERATING SOAPUI XML---")
     parsed_wsdl = state.get("parsed_wsdl", {})
     wsdl_content = state.get("wsdl_content", "")
-    generated_requests = state.get("test_cases", {}) # Renamed for clarity
+    all_test_cases = state.get("test_cases", {})
 
-    # Define namespaces
     CON_NS = "http://eviware.com/soapui/config"
     XSI_NS = "http://www.w3.org/2001/XMLSchema-instance"
     NSMAP = {'con': CON_NS, 'xsi': XSI_NS}
     CON = f"{{{CON_NS}}}"
 
-    # Create root element
-    project = etree.Element(CON + "soapui-project", name="Generated LLM Project", soapui_version="5.7.0", nsmap=NSMAP)
-
-    # Create WSDL Interface
     service = parsed_wsdl.get("services", [{}])[0]
     service_name = service.get("name", "MyService")
+    project_name = f"{service_name} LLM Project"
+
+    project = etree.Element(CON + "soapui-project", name=project_name, soapui_version="5.7.0", nsmap=NSMAP)
+
     port = service.get("ports", [{}])[0]
     binding_name = port.get("binding", "MyBinding")
 
     interface = etree.SubElement(project, CON + "interface",
         attrib={
             etree.QName(XSI_NS, "type"): "con:WsdlInterface",
-            "name": binding_name,
-            "type": "wsdl",
-            "bindingName": binding_name,
-            "soapVersion": "1_1", # Assuming 1.1 for now
-            "wsaVersion": "NONE",
-            "definition": "memory.wsdl" # Placeholder name
+            "name": binding_name, "type": "wsdl", "bindingName": binding_name,
+            "soapVersion": "1_1", "wsaVersion": "NONE", "definition": "memory.wsdl"
         }
     )
 
-    # Embed the WSDL content
     definition_cache = etree.SubElement(interface, CON + "definitionCache", type="TEXT", rootPart="memory.wsdl")
     part = etree.SubElement(definition_cache, CON + "part")
     etree.SubElement(part, CON + "url").text = "memory.wsdl"
     etree.SubElement(part, CON + "content").text = etree.CDATA(wsdl_content)
     etree.SubElement(part, CON + "type").text = "http://schemas.xmlsoap.org/wsdl/"
 
-    # Create Test Suite
     test_suite = etree.SubElement(project, CON + "testSuite", name=f"{service_name} TestSuite")
 
-    # Create Test Cases and Steps for each operation
-    for op_name, requests in generated_requests.items():
-        test_case = etree.SubElement(test_suite, CON + "testCase", name=f"{op_name} TestCase")
+    for op_name, cases in all_test_cases.items():
+        test_case_name = f"{op_name} TestCase"
+        test_case = etree.SubElement(test_suite, CON + "testCase", name=test_case_name)
 
-        for case_type, request_xml in requests.items():
-            test_step = etree.SubElement(test_case, CON + "testStep", type="request", name=f"{op_name} - {case_type}")
+        for case_type, case_data in cases.items():
+            test_step_name = case_data.get("name", f"{op_name} - {case_type}")
+            test_step = etree.SubElement(test_case, CON + "testStep", type="request", name=test_step_name)
 
             config = etree.SubElement(test_step, CON + "config", attrib={etree.QName(XSI_NS, "type"): "con:RequestStep"})
             etree.SubElement(config, CON + "interface").text = binding_name
             etree.SubElement(config, CON + "operation").text = op_name
 
             request_elem = etree.SubElement(config, CON + "request")
-            etree.SubElement(request_elem, CON + "request").text = etree.CDATA(request_xml)
-            # Add default assertions
-            assertions = etree.SubElement(request_elem, CON + "assertions")
-            assertion_config = etree.SubElement(assertions, CON + "assertion", type="Valid HTTP Status Codes")
-            etree.SubElement(assertion_config, CON + "configuration").text = "200"
+            etree.SubElement(request_elem, CON + "request").text = etree.CDATA(case_data.get("request", ""))
+
+            assertions_elem = etree.SubElement(request_elem, CON + "assertions")
+            for assertion in case_data.get("assertions", []):
+                assertion_type = assertion.get("type")
+                assertion_value = assertion.get("value")
+
+                if not assertion_type:
+                    continue
+
+                assertion_config = etree.SubElement(assertions_elem, CON + "assertion", type=assertion_type)
+                config_elem = etree.SubElement(assertion_config, CON + "configuration")
+
+                if assertion_type == "Valid HTTP Status Codes":
+                    etree.SubElement(config_elem, CON + "codes").text = str(assertion_value)
+                elif assertion_type == "XPath Match":
+                    etree.SubElement(config_elem, CON + "path").text = str(assertion_value)
+                    etree.SubElement(config_elem, CON + "content").text = "true" # Default to check for existence
+                    etree.SubElement(config_elem, CON + "allowWildcards").text = "true"
+                    etree.SubElement(config_elem, CON + "ignoreNamspaceDifferences").text = "true"
+                    etree.SubElement(config_elem, CON + "ignoreComments").text = "true"
+                # For SOAP Fault, Not SOAP Fault, etc., no extra config is needed
 
     xml_content = etree.tostring(project, pretty_print=True, xml_declaration=True, encoding="UTF-8")
     return {**state, "soapui_project_xml": xml_content.decode("utf-8")}
