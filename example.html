@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SOAP Test Generator</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <div class="logo">
+                <div class="logo-icon">S</div>
+                <h1>SOAP Test Generator</h1>
+            </div>
+            <button class="help-btn">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
+                <span>Help</span>
+            </button>
+        </header>
+
+        <main>
+            <section class="intro">
+                <h2>Generate SOAP UI Tests with Ease</h2>
+                <p>Provide your text input and WSDL file to automatically generate test cases.</p>
+            </section>
+
+            <section class="generator-grid">
+                <div class="input-panel">
+                    <form>
+                        <div class="form-group">
+                            <label for="text-input">Text Input</label>
+                            <textarea id="text-input" placeholder="Describe the test case in plain text..."></textarea>
+                        </div>
+                        <div class="form-group">
+                            <label for="wsdl-file">WSDL File</label>
+                            <div class="file-drop-area">
+                                 <div class="stitch-badge">Stitch - Design with AI</div>
+                                <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#6B7280" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+                                <p class="upload-text"><strong>Upload a file</strong> or drag and drop</p>
+                                <p class="upload-hint">WSDL up to 10MB</p>
+                                <input type="file" id="wsdl-file-input" hidden>
+                            </div>
+                        </div>
+                        <button type="submit" class="btn-primary">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
+                            <span>Generate Tests</span>
+                        </button>
+                    </form>
+                </div>
+
+                <div class="output-panel">
+                    <div class="output-header">
+                        <label>Generated XML Test Code</label>
+                        <button class="btn-download">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                            <span>Download</span>
+                        </button>
+                    </div>
+                    <div class="code-display">
+                        <pre><code>&lt;!-- Generated XML will appear here --&gt;</code></pre>
+                    </div>
+                </div>
+            </section>
+        </main>
+
+        <footer>
+            <p>© 2024 SOAP Test Generator. All rights reserved.</p>
+        </footer>
+    </div>
+</body>
+</html>
