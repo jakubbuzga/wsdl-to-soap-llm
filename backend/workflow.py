@@ -28,22 +28,22 @@ def parse_wsdl(state: GraphState) -> GraphState:
 
         parsed_data = {"services": []}
         for service in client.wsdl.services.values():
-            service_info = {"name": service.name, "ports": []}
+            service_info = {"name": str(service.name), "ports": []}
             for port in service.ports.values():
-                port_info = {"name": port.name, "binding": port.binding.name, "operations": []}
+                port_info = {"name": str(port.name), "binding": str(port.binding.name), "operations": []}
                 for operation in port.binding._operations.values():
                     input_elements = []
                     if hasattr(operation.input, 'body') and hasattr(operation.input.body, 'parts'):
                         for part in operation.input.body.parts.values():
-                            input_elements.append({"name": part.name, "type": str(part.type)})
+                            input_elements.append({"name": str(part.name), "type": str(part.type)})
 
                     output_elements = []
                     if hasattr(operation.output, 'body') and hasattr(operation.output.body, 'parts'):
                         for part in operation.output.body.parts.values():
-                            output_elements.append({"name": part.name, "type": str(part.type)})
+                            output_elements.append({"name": str(part.name), "type": str(part.type)})
 
                     operation_info = {
-                        "name": operation.name,
+                        "name": str(operation.name),
                         "input_elements": input_elements,
                         "output_elements": output_elements,
                     }
