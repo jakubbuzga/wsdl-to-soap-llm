@@ -1,0 +1,200 @@
+1. Project Overview
+
+This document outlines the software architecture and implementation plan for a tool that automatically generates SoapUI test projects from a Web Service Definition Language (WSDL) file and user input. The tool will leverage a locally-run Large Language Model (LLM) to create comprehensive test cases with assertions, ensuring the generated SoapUI project is valid and ready to be imported and executed.
+
+2. System Architecture
+
+The system will be composed of three main components: a React frontend, a FastAPI backend, and a LangGraph-powered core logic engine that interacts with a local LLM.
+
+[User] -> [React Frontend] -> [FastAPI Backend] -> [LangGraph Workflow] -> [Local LLM]
+                                     ^                  |
+                                     |                  v
+                                     +----------[WSDL Parser]
+                                     |                  |
+                                     |                  v
+                                     +-----[SoapUI XML Generator]
+
+
+React Frontend: Provides the user interface for uploading a WSDL file, entering any specific test requirements, and downloading the generated SoapUI project. The design will be based on the provided image.
+
+FastAPI Backend: Acts as the intermediary between the frontend and the core logic. It handles file uploads, orchestrates the test generation process via LangGraph, and serves the final SoapUI XML file.
+
+LangGraph Workflow: The core of the application, this stateful workflow manages the entire test generation process. It will:
+
+Parse the WSDL file to understand the SOAP service's structure.
+
+Interact with the LLM to generate meaningful test cases and assertions.
+
+Generate a valid SoapUI XML project file.
+
+Local LLM: A powerful language model running in a Docker container, responsible for generating the creative and logical parts of the test cases.
+
+3. Technology Stack
+
+Frontend: React, Tailwind CSS
+
+Backend: FastAPI, Python 3.10+
+
+Core Logic: LangGraph, zeep (for WSDL parsing), lxml (for XML generation)
+
+LLM: A local LLM (e.g., Mixtral, CodeLlama, Deepseek-Coder) running in a Docker container, served via a compatible API (e.g., Ollama).
+
+Containerization: Docker, Docker Compose
+
+4. Implementation Details
+
+4.1. Docker Compose Setup
+
+The entire application will be managed by a docker-compose.yml file. This allows for one-command setup and teardown of all services.
+
+Services:
+
+frontend: Builds the React app from its Dockerfile and serves it on port 3000.
+
+backend: Builds the FastAPI app from its Dockerfile, connects it to the ollama service, and exposes port 8000.
+
+ollama: Runs the official Ollama image to serve the LLM on port 11434.
+
+Networking: A custom bridge network (soap-gen-net) will be created to allow the services to communicate with each other using their service names (e.g., the backend can reach the LLM at http://ollama:11434).
+
+Volumes: A named volume (ollama_data) will be used to persist the downloaded LLM models, so they don't need to be re-downloaded every time the container starts.
+
+4.2. Local LLM Setup (Docker)
+
+Choose an LLM: Select a suitable open-source LLM available through Ollama. For this task, models with strong code generation and reasoning capabilities are recommended, such as Mixtral, CodeLlama, or Deepseek-Coder.
+
+Use Ollama: The easiest way to get a local LLM running is with Ollama. Follow the official Ollama documentation to install it and pull your chosen model (e.g., ollama pull mixtral).
+
+Run the LLM: Start the Ollama server. It will expose an API that the FastAPI backend can interact with.
+
+4.3. Backend (FastAPI)
+
+Project Setup:
+
+Initialize a new FastAPI project.
+
+Create a virtualenv and install the necessary dependencies: fastapi, uvicorn, python-multipart, langgraph, zeep, lxml, requests.
+
+API Endpoint:
+
+Create a single endpoint (e.g., /generate-soapui-project/) that accepts a WSDL file and user input (as a JSON object) in a multipart/form-data request.
+
+LangGraph Integration:
+
+The endpoint will trigger the LangGraph workflow, passing the WSDL file and user input as the initial state.
+
+Upon completion of the workflow, the endpoint will receive the generated SoapUI XML file and return it to the frontend as a downloadable file.
+
+4.4. Core Logic (LangGraph)
+
+State Definition:
+
+Define a TypedDict for the graph's state, which will include:
+
+wsdl_content: The content of the uploaded WSDL file.
+
+user_input: The user's specific test requirements.
+
+parsed_wsdl: The parsed WSDL data (operations, types, etc.).
+
+test_cases: A list of generated test cases with assertions.
+
+soapui_project_xml: The final generated SoapUI XML.
+
+Graph Nodes:
+
+parse_wsdl:
+
+Takes the wsdl_content from the state.
+
+Uses the zeep library to parse the WSDL and extract a structured representation of the services, operations, and data types.
+
+Updates the state with the parsed_wsdl data.
+
+generate_test_cases:
+
+Takes the parsed_wsdl and user_input from the state.
+
+For each operation in the WSDL, constructs a detailed prompt for the LLM. The prompt should include:
+
+The operation's name, inputs, and outputs.
+
+The data types of the inputs and outputs.
+
+Any user-provided requirements.
+
+A request for the LLM to generate a set of test cases, including:
+
+A descriptive name for each test case.
+
+Sample request data (positive, negative, and edge cases).
+
+Assertions to validate the response (e.g., SOAPResponse, ValidHTTPStatusCodes, Contains, Not Contains, XPath Match).
+
+Sends the prompt to the local LLM's API.
+
+Parses the LLM's response (which should be in a structured format like JSON) and updates the state with the test_cases.
+
+generate_soapui_xml:
+
+Takes the test_cases from the state.
+
+Uses the lxml library to programmatically construct a valid SoapUI XML project file. The structure should follow the standard SoapUI project format.
+
+Updates the state with the soapui_project_xml.
+
+Graph Definition:
+
+Create a StateGraph and add the nodes.
+
+Define the edges to connect the nodes in the correct sequence: START -> parse_wsdl -> generate_test_cases -> generate_soapui_xml -> END.
+
+4.5. Frontend (React)
+
+Project Setup:
+
+Initialize a new React project using Create React App or Vite.
+
+Install axios for making API requests and tailwindcss for styling.
+
+Components:
+
+WsdlUploadForm:
+
+A form with a file input for the WSDL file and text areas for user-specific requirements.
+
+On submit, it will send the data to the FastAPI backend using axios.
+
+ResultDisplay:
+
+A component that displays a loading indicator while the backend is processing the request.
+
+Once the request is complete, it will display a "Download SoapUI Project" button. The button will trigger a download of the generated XML file.
+
+5. Data Flow
+
+The user uploads a WSDL file and provides any specific test requirements in the React frontend.
+
+The frontend sends this data to the FastAPI backend.
+
+The backend initiates the LangGraph workflow with the WSDL content and user input.
+
+The parse_wsdl node parses the WSDL file.
+
+The generate_test_cases node interacts with the local LLM to generate test cases.
+
+The generate_soapui_xml node creates the final SoapUI XML project.
+
+The backend returns the XML file to the frontend.
+
+The user can then download the generated SoapUI project file.
+
+6. Reliability and Error Handling
+
+WSDL Parsing: The zeep library is robust, but it's important to handle potential parsing errors for invalid or malformed WSDL files.
+
+LLM Interaction: Implement retry logic with exponential backoff when calling the LLM's API to handle potential timeouts or temporary issues.
+
+LLM Output Validation: The output from the LLM should be validated to ensure it's in the expected format (e.g., valid JSON). If not, the generate_test_cases node should handle the error gracefully, possibly by retrying the LLM call with a modified prompt.
+
+SoapUI XML Validation: The generated XML should be validated against the SoapUI project schema to ensure it can be imported without errors.
